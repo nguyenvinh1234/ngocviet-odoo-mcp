@@ -1,0 +1,70 @@
+# Dùng khi server đã có Nginx (thường là Nginx đứng trước Odoo) — thay cho Caddy.
+# KHÔNG sửa trực tiếp file này: chạy scripts/render-nginx.sh để điền token,
+# kết quả là proxy/nginx-mcp.local.conf (bị .gitignore).
+#
+# Chứng chỉ: sudo certbot certonly --nginx -d __MCP_DOMAIN__
+#
+# Nginx dùng format log mặc định nên KHÔNG ghi header Authorization.
+# "if ... return" trong location là cách dùng an toàn của "if" trong Nginx.
+
+server {
+    listen 80;
+    server_name __MCP_DOMAIN__;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    # Nginx >= 1.25.1 có thể đổi thành: listen 443 ssl; + http2 on;
+    listen 443 ssl http2;
+    server_name __MCP_DOMAIN__;
+
+    ssl_certificate     /etc/letsencrypt/live/__MCP_DOMAIN__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__MCP_DOMAIN__/privkey.pem;
+
+    access_log /var/log/nginx/mcp-access.log;
+    error_log  /var/log/nginx/mcp-error.log;
+
+    client_max_body_size 5m;
+
+    # Streamable HTTP trả về luồng SSE: không đệm, giữ kết nối lâu.
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 3600s;
+    proxy_set_header Host $host;
+    proxy_set_header Connection "";
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Server chỉ có route "/mcp": chấp nhận /<phong-ban>/mcp và /<phong-ban>/mcp/,
+    # đổi đường dẫn về /mcp (proxy_pass trong location regex không được mang URI).
+    location ~ ^/ban-giam-doc/mcp/?$ {
+        if ($http_authorization != "Bearer __TOKEN_BAN_GIAM_DOC__") { return 401; }
+        rewrite ^ /mcp break;
+        proxy_pass http://127.0.0.1:8101;
+    }
+    location ~ ^/kinh-doanh/mcp/?$ {
+        if ($http_authorization != "Bearer __TOKEN_KINH_DOANH__") { return 401; }
+        rewrite ^ /mcp break;
+        proxy_pass http://127.0.0.1:8102;
+    }
+    location ~ ^/ke-toan/mcp/?$ {
+        if ($http_authorization != "Bearer __TOKEN_KE_TOAN__") { return 401; }
+        rewrite ^ /mcp break;
+        proxy_pass http://127.0.0.1:8103;
+    }
+    location ~ ^/kho-mua-hang/mcp/?$ {
+        if ($http_authorization != "Bearer __TOKEN_KHO_MUA_HANG__") { return 401; }
+        rewrite ^ /mcp break;
+        proxy_pass http://127.0.0.1:8104;
+    }
+    location ~ ^/cskh/mcp/?$ {
+        if ($http_authorization != "Bearer __TOKEN_CSKH__") { return 401; }
+        rewrite ^ /mcp break;
+        proxy_pass http://127.0.0.1:8105;
+    }
+
+    location / {
+        return 404;
+    }
+}

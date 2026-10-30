@@ -1,0 +1,72 @@
+# Mỗi phòng ban một instance mcp-server-odoo, mỗi instance một user Odoo + API key riêng.
+#
+# network_mode: host — Odoo chạy trực tiếp trên cùng server (127.0.0.1:8069) và
+# thường chỉ lắng nghe localhost; container dùng mạng của host để thấy Odoo,
+# và tự bind 127.0.0.1:<port> (xem ODOO_MCP_HOST trong env) nên không lộ ra ngoài.
+#
+# Image ghim theo tag + digest của bản 0.9.0 đã rà soát mã nguồn. Nâng phiên bản:
+# xem README "Quy tắc của repo".
+
+x-mcp: &mcp
+  image: ghcr.io/ivnvxd/mcp-server-odoo:0.9.0@sha256:ed18538ab89bedf3b456d0b347cbceb8c278c9a8d7abde5bab4fd19b03c234cc
+  network_mode: host
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  volumes:
+    - ./logs:/logs
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  mcp-ban-giam-doc:
+    <<: *mcp
+    container_name: mcp-ban-giam-doc
+    env_file: [env/common.env, env/ban-giam-doc.env]
+
+  mcp-kinh-doanh:
+    <<: *mcp
+    container_name: mcp-kinh-doanh
+    env_file: [env/common.env, env/kinh-doanh.env]
+
+  mcp-ke-toan:
+    <<: *mcp
+    container_name: mcp-ke-toan
+    env_file: [env/common.env, env/ke-toan.env]
+
+  mcp-kho-mua-hang:
+    <<: *mcp
+    container_name: mcp-kho-mua-hang
+    env_file: [env/common.env, env/kho-mua-hang.env]
+
+  mcp-cskh:
+    <<: *mcp
+    container_name: mcp-cskh
+    env_file: [env/common.env, env/cskh.env]
+
+  # Chỉ dùng khi server CHƯA có web server chiếm cổng 80/443.
+  # Nếu Odoo đang chạy sau Nginx, dùng proxy/nginx-mcp.conf.example thay cho Caddy.
+  caddy:
+    image: caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+    container_name: mcp-caddy
+    profiles: [caddy]
+    network_mode: host
+    restart: unless-stopped
+    env_file: [env/proxy.env]
+    volumes:
+      - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./logs/caddy:/var/log/caddy
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,87 @@
+# Reverse proxy cho các instance MCP — HTTPS tự động (Let's Encrypt) + token theo phòng ban.
+# Biến {$...} lấy từ env/proxy.env lúc Caddy khởi động.
+#
+# Mỗi phòng ban: https://{$MCP_DOMAIN}/<phong-ban>/mcp
+#   - đúng token  → chuyển tới 127.0.0.1:<port>/mcp
+#   - sai/thiếu   → 401
+# Caddy mặc định KHÔNG ghi header Authorization vào access log.
+
+{
+	email {$ACME_EMAIL}
+}
+
+(mcp_upstream) {
+	# Server chỉ có route "/mcp" — bỏ tiền tố phòng ban và dấu "/" cuối.
+	uri strip_prefix /{args[0]}
+	uri strip_suffix /
+	reverse_proxy 127.0.0.1:{args[1]} {
+		# Streamable HTTP trả về luồng SSE: không đệm, đẩy ngay.
+		flush_interval -1
+		transport http {
+			read_timeout 1h
+		}
+	}
+}
+
+{$MCP_DOMAIN} {
+	log {
+		output file /var/log/caddy/mcp-access.log {
+			roll_size 50MiB
+			roll_keep 20
+		}
+		format json
+	}
+
+	request_body {
+		max_size 5MB
+	}
+
+	@ban-giam-doc path /ban-giam-doc/mcp /ban-giam-doc/mcp/
+	handle @ban-giam-doc {
+		@ban-giam-doc-ok header Authorization "Bearer {$TOKEN_BAN_GIAM_DOC}"
+		handle @ban-giam-doc-ok {
+			import mcp_upstream ban-giam-doc 8101
+		}
+		respond 401
+	}
+
+	@kinh-doanh path /kinh-doanh/mcp /kinh-doanh/mcp/
+	handle @kinh-doanh {
+		@kinh-doanh-ok header Authorization "Bearer {$TOKEN_KINH_DOANH}"
+		handle @kinh-doanh-ok {
+			import mcp_upstream kinh-doanh 8102
+		}
+		respond 401
+	}
+
+	@ke-toan path /ke-toan/mcp /ke-toan/mcp/
+	handle @ke-toan {
+		@ke-toan-ok header Authorization "Bearer {$TOKEN_KE_TOAN}"
+		handle @ke-toan-ok {
+			import mcp_upstream ke-toan 8103
+		}
+		respond 401
+	}
+
+	@kho-mua-hang path /kho-mua-hang/mcp /kho-mua-hang/mcp/
+	handle @kho-mua-hang {
+		@kho-mua-hang-ok header Authorization "Bearer {$TOKEN_KHO_MUA_HANG}"
+		handle @kho-mua-hang-ok {
+			import mcp_upstream kho-mua-hang 8104
+		}
+		respond 401
+	}
+
+	@cskh path /cskh/mcp /cskh/mcp/
+	handle @cskh {
+		@cskh-ok header Authorization "Bearer {$TOKEN_CSKH}"
+		handle @cskh-ok {
+			import mcp_upstream cskh 8105
+		}
+		respond 401
+	}
+
+	handle {
+		respond 404
+	}
+}

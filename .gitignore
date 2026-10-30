@@ -1,0 +1,5 @@
+# Bí mật — chỉ commit *.example
+env/*.env
+proxy/*.local.*
+logs/*
+!logs/.gitkeep
